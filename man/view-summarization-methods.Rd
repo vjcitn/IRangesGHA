@@ -127,7 +127,7 @@ viewRangeMaxs(x, na.rm=FALSE)
   be deprecated at some point).
 }
 
-\author{P. Aboyoun}
+\author{P. Aboyoun and H. Pagès}
 
 \seealso{
   \itemize{

@@ -19,7 +19,7 @@ setGeneric("tile", function(x, n, width, ...) standardGeneric("tile"),
 setMethod("tile", "IntegerRanges", function(x, n, width, ...) {
   if (!missing(n)) {
     if (!missing(width))
-      stop("only one of 'n' and 'width' can be specified")
+      stop("only one of 'n' or 'width' can be specified")
     if (any(IRanges::width(x) < n))
       stop("some width(x) are less than 'n'")
     if (any(n < 0L))
@@ -28,7 +28,7 @@ setMethod("tile", "IntegerRanges", function(x, n, width, ...) {
   }
   if (!missing(width)) {
     if (!missing(n))
-      stop("only one of 'n' and 'width' can be specified")
+      stop("only one of 'n' or 'width' can be specified")
     if (any(width < 0L))
       stop("some 'width' are negative")
     n <- ceiling(width(x) / width)

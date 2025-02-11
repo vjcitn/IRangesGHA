@@ -593,12 +593,12 @@ setCompressedListWhichSummaryMethod("which.max")
 
 setMethod("which.min", "CompressedRleList",
           function(x) {
-            viewWhichMins(as(x, "RleViews"), na.rm=TRUE) -
+            viewWhichMins(as(x, "RleViews")) -
               c(0L, head(cumsum(elementNROWS(x)), -1))
           })
 setMethod("which.max", "CompressedRleList",
           function(x) {
-            viewWhichMaxs(as(x, "RleViews"), na.rm=TRUE) -
+            viewWhichMaxs(as(x, "RleViews")) -
               c(0L, head(cumsum(elementNROWS(x)), -1))
           })
 

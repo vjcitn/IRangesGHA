@@ -166,33 +166,10 @@ SEXP C_vmembers_H2LGrouping(
 
 /* RleViews_utils.c */
 
-SEXP C_viewMins_RleViews(
-	SEXP x,
-	SEXP na_rm
-);
-
-SEXP C_viewMaxs_RleViews(
-	SEXP x,
-	SEXP na_rm
-);
-
-SEXP C_viewSums_RleViews(
-	SEXP x,
-	SEXP na_rm
-);
-
-SEXP C_viewMeans_RleViews(
-	SEXP x,
-	SEXP na_rm
-);
-
-SEXP C_viewWhichMins_RleViews(
-	SEXP x,
-	SEXP na_rm
-);
-
-SEXP C_viewWhichMaxs_RleViews(
-	SEXP x,
+SEXP C_summarize_RleViews(
+	SEXP op,
+	SEXP x_subject,
+	SEXP x_ranges,
 	SEXP na_rm
 );
 

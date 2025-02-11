@@ -364,14 +364,8 @@ setMethod("Summary", "Views", function(x, ..., na.rm = FALSE) {
 })
 
 setMethod("mean", "Views", viewMeans)
-
-setMethod("which.max", "Views", function(x) {
-  viewWhichMaxs(x, na.rm = TRUE)
-})
-
-setMethod("which.min", "Views", function(x) {
-  viewWhichMins(x, na.rm = TRUE)
-})
+setMethod("which.min", "Views", function(x) viewWhichMins(x))
+setMethod("which.max", "Views", function(x) viewWhichMaxs(x))
 
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

@@ -99,7 +99,7 @@ breakInChunks <- function(totalsize, nchunk, chunksize)
     totalsize <- .normarg_totalsize(totalsize)
     if (!missing(nchunk)) {
         if (!missing(chunksize))
-            stop("only one of 'nchunk' and 'chunksize' can be specified")
+            stop("only one of 'nchunk' or 'chunksize' can be specified")
         ## All chunks will have more or less the same size, with the difference
         ## between smallest and biggest chunks guaranteed to be <= 1.
         nchunk <- .normarg_nchunk_or_chunksize(nchunk, totalsize,
@@ -115,7 +115,7 @@ breakInChunks <- function(totalsize, nchunk, chunksize)
         breakpoints[[nchunk]] <- totalsize
     } else {
         if (missing(chunksize))
-            stop("one of 'nchunk' and 'chunksize' must be specified")
+            stop("one of 'nchunk' or 'chunksize' must be specified")
         ## All chunks will have the requested size, except maybe the last one.
         chunksize <- .normarg_nchunk_or_chunksize(chunksize, totalsize,
                                                   "chunksize")
