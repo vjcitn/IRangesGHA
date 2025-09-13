@@ -195,8 +195,7 @@ setAs("RleList", "SimpleNormalIRangesList",
       function(from)
       {
         if ((length(from) > 0) &&
-            (!is.logical(runValue(from[[1L]])) ||
-             S4Vectors:::anyMissing(runValue(from[[1L]]))))
+            (!is.logical(runValue(from[[1L]])) || anyNA(runValue(from[[1L]]))))
           stop("cannot coerce a non-logical 'RleList' or a logical 'RleList' ",
                "with NAs to a SimpleNormalIRangesList object")
         S4Vectors:::new_SimpleList_from_list("SimpleNormalIRangesList",

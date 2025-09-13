@@ -30,7 +30,7 @@ setMethod("reverse", "character",
             stop("'start' must be a vector of integers")
         if (!is.integer(start))
             start <- as.integer(start)
-        if (S4Vectors:::anyMissing(start))
+        if (anyNA(start))
             stop("'start' contains NAs")
     }
     if (is.na(n2p[2L])) {
@@ -41,7 +41,7 @@ setMethod("reverse", "character",
             stop("'end' must be a vector of integers")
         if (!is.integer(end))
             end <- as.integer(end)
-        if (S4Vectors:::anyMissing(end))
+        if (anyNA(end))
             stop("'end' contains NAs")
     }
     if (!is.na(n2p[3L]) && !S4Vectors:::normargUseNames(args[[n2p[3L]]]))

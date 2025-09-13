@@ -237,7 +237,7 @@ setMethod("resize", "Ranges",
         if (is(x, "NormalIRanges"))
             stop("resizing a NormalIRanges object is not supported")
         lx <- length(x)
-        if (!is.numeric(width) || S4Vectors:::anyMissing(width))
+        if (!is.numeric(width) || anyNA(width))
             stop("'width' must be a numeric vector without NA's")
         if (!is.integer(width))
             width <- as.integer(width)
@@ -319,7 +319,7 @@ setMethod("flank", "Ranges",
         if (is(x, "NormalIRanges"))
             stop("flanking a NormalIRanges object is not supported")
         width <- recycleIntegerArg(width, "width", length(x))
-        if (!is.logical(start) || S4Vectors:::anyMissing(start))
+        if (!is.logical(start) || anyNA(start))
             stop("'start' must be logical without NA's")
         start <- S4Vectors:::recycleVector(unname(start), length(x))
         if (!isTRUEorFALSE(both))
@@ -700,7 +700,7 @@ setMethod("threebands", "IRanges",
 setMethod("Ops", c("Ranges", "numeric"),
     function(e1, e2)
     {
-        if (S4Vectors:::anyMissing(e2))
+        if (anyNA(e2))
             stop("NA not allowed as zoom factor")
         if ((length(e1) < length(e2) && length(e1)) ||
             (length(e1) && !length(e2)) ||

@@ -25,7 +25,7 @@ setMethod("ranges", "Rle",
 setAs("Rle", "IRanges",
       function(from)
       {
-          if (!is.logical(runValue(from)) || S4Vectors:::anyMissing(runValue(from)))
+          if (!is.logical(runValue(from)) || anyNA(runValue(from)))
               stop("cannot coerce a non-logical 'Rle' or a logical 'Rle' ",
                    "with NAs to an IRanges object")
           keep <- runValue(from)
@@ -49,7 +49,7 @@ setGeneric("findRange", signature = "vec",
 setMethod("findRange", signature = c(vec = "Rle"),
           function(x, vec) {
               run <- findRun(x, vec)
-              if (S4Vectors:::anyMissing(run))
+              if (anyNA(run))
                 stop("all 'x' values must be in [1, 'length(vec)']")
               IRanges(start = start(vec)[run], width = width(vec)[run],
                       names = names(x))

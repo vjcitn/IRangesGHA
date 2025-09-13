@@ -159,8 +159,7 @@ setAs("CompressedRleList", "CompressedIRangesList",
       function(from)
       {
         if ((length(from) > 0) &&
-            (!is.logical(runValue(from[[1L]])) ||
-             S4Vectors:::anyMissing(runValue(from[[1L]]))))
+            (!is.logical(runValue(from[[1L]])) || anyNA(runValue(from[[1L]]))))
           stop("cannot coerce a non-logical 'RleList' or a logical 'RleList' ",
                "with NAs to a CompressedIRangesList object")
         ranges <- as(unlist(from, use.names = FALSE), "IRanges")
@@ -288,8 +287,7 @@ setAs("RleList", "CompressedNormalIRangesList",
       function(from)
       {
         if ((length(from) > 0) &&
-            (!is.logical(runValue(from[[1L]])) ||
-             S4Vectors:::anyMissing(runValue(from[[1L]]))))
+            (!is.logical(runValue(from[[1L]])) || anyNA(runValue(from[[1L]]))))
           stop("cannot coerce a non-logical 'RleList' or a logical 'RleList' ",
                "with NAs to a CompressedNormalIRangesList object")
         new_CompressedList_from_list("CompressedNormalIRangesList",

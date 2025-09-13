@@ -32,7 +32,7 @@ successiveIRanges <- function(width, gapwidth=0, from=1)
         stop("'gapwidth' must be an integer vector")
     if (!is.integer(gapwidth))
         gapwidth <- as.integer(gapwidth)
-    if (S4Vectors:::anyMissing(gapwidth))
+    if (anyNA(gapwidth))
         stop("'gapwidth' cannot contain NAs")
     if (length(gapwidth) != length(width) - 1L) {
         if (length(gapwidth) != 1L)
