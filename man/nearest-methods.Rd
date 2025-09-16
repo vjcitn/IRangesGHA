@@ -60,7 +60,6 @@
     length, the shortest will be recycled to match the length of the
     longest.
   }
-  \item{hits}{The hits between \code{x} and \code{subject}}
   \item{...}{Additional arguments for methods}
 }
 
@@ -72,18 +71,17 @@
       for each range in \code{x}. If there is no nearest neighbor
       (if \code{subject} is empty), NA's are returned.
 
-      Here is roughly how it proceeds, for a range \code{xi} in \code{x}:
-      \enumerate{
-        \item Find the ranges in \code{subject} that overlap \code{xi}. If a
-          single range \code{si} in \code{subject} overlaps \code{xi},
-          \code{si} is returned as the nearest neighbor of \code{xi}. If there
-          are multiple overlaps, one of the overlapping ranges is chosen
-          arbitrarily.
-        \item If no ranges in \code{subject} overlap with \code{xi}, then
-          the range in \code{subject} with the shortest distance from its end
-          to the start \code{xi} or its start to the end of \code{xi} is
-          returned.
-      }
+      Here is how it proceeds, for a range \code{xi} in \code{x}:
+
+      Find the ranges in \code{subject} that minimize the distance to
+      \code{xi}. If a single range \code{si} in \code{subject} achieves
+      the shortest distance to \code{xi}, \code{si} is returned as the
+      nearest neighbor of \code{xi}. If multiple ranges in \code{subject}
+      achieve the shortest distance to \code{xi}, one of them is chosen
+      arbitrarily.
+
+      See \code{distance} below for how the distance between two ranges is
+      defined.
     }
     \item{\code{precede(x, subject, select=c("first", "all"))}:}{
       For each range in \code{x}, \code{precede} returns the index of the
