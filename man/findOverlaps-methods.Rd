@@ -193,17 +193,36 @@ findOverlapPairs(query, subject, ...)
     \code{findOverlaps}).
   }
   \item{...}{
-    Further arguments to be passed to or from other methods:
+    Further arguments to be passed to specific methods. For example:
     \itemize{
       \item \code{drop}: Supported only when \code{query} is an
             \link{IntegerRangesList} derivative.
-            \code{FALSE} by default. See \code{select} argument above for the
-            details.
+            \code{FALSE} by default. See \code{select} argument above
+            for the details.
+
       \item \code{drop.self}, \code{drop.redundant}: When \code{subject}
             is omitted, the \code{drop.self} and \code{drop.redundant}
             arguments (both \code{FALSE} by default) are allowed.
-            See \code{query} and \code{subject} arguments above for the
-            details.
+            See \code{query} and \code{subject} arguments above for
+            the details.
+
+      \item \code{nthread}: EXPERIMENTAL! Sets the maximum number of
+            threads to use.
+
+            The implementation of \code{findOverlaps} and family supports
+            multithreading on systems where OpenMP is available e.g. on
+            most Linux systems. Because this feature is still experimental,
+            only one thread is used by default at the moment. However, this
+            can be changed by setting the \code{nthread} argument to the
+            maximum number of threads that \code{findOverlaps} and family
+            are allowed to use.
+
+            On systems where OpenMP is not available (e.g. on macOS), setting
+            \code{nthread} has no effect.
+
+            Note that \code{nthread} is only supported when the input objects
+            are \link{IntegerRanges} derivatives at the moment. Support for
+            other input types will be added soon.
     }
   }
 }
@@ -280,7 +299,7 @@ findOverlapPairs(query, subject, ...)
   Communications of the ACM. 26/11/1983. ACM Press. S. 832-843, ISSN 0001-0782
 }
 
-\author{Michael Lawrence and Hervé Pagès}
+\author{Hervé Pagès and Michael Lawrence}
 
 \seealso{
   \itemize{

@@ -7,6 +7,11 @@
 
 static const R_CallMethodDef callMethods[] = {
 
+/* thread_control.c */
+	CALLMETHOD_DEF(C_get_num_procs, 0),
+	CALLMETHOD_DEF(C_get_max_threads, 0),
+	CALLMETHOD_DEF(C_set_max_threads, 1),
+
 /* Ranges_class.c */
 	CALLMETHOD_DEF(C_validate_Ranges, 3),
 
@@ -58,7 +63,7 @@ static const R_CallMethodDef callMethods[] = {
 	CALLMETHOD_DEF(C_build_NCList, 4),
 	CALLMETHOD_DEF(C_new_NCListAsINTSXP_from_NCList, 1),
 	CALLMETHOD_DEF(C_print_NCListAsINTSXP, 3),
-	CALLMETHOD_DEF(C_find_overlaps_NCList, 11),
+	CALLMETHOD_DEF(C_find_overlaps_NCList, 12),
 	CALLMETHOD_DEF(C_find_overlaps_in_groups_NCList, 15),
 
 /* CompressedAtomicList_utils.c */

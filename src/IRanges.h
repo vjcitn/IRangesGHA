@@ -8,6 +8,15 @@
 }
 
 
+/* thread_control.c */
+
+SEXP C_get_num_procs(void);
+
+SEXP C_get_max_threads(void);
+
+SEXP C_set_max_threads(SEXP nthread);
+
+
 /* Ranges_class.c */
 
 SEXP C_validate_Ranges(
@@ -343,7 +352,8 @@ SEXP C_find_overlaps_NCList(
 	SEXP minoverlap,
 	SEXP type,
 	SEXP select,
-	SEXP circle_length
+	SEXP circle_length,
+	SEXP nthread
 );
 
 SEXP C_find_overlaps_in_groups_NCList(

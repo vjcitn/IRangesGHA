@@ -6,18 +6,27 @@
 #include "S4Vectors_interface.h"
 
 #include <stdlib.h>  /* for malloc, realloc, free, abs */
+#include <string.h>  /* for memcpy */
 #include <math.h>    /* for log10 */
+
+#ifdef _OPENMP
+/* <Rinternals.h> defines macro match that seems to break <omp.h> with
+   some versions of Clang.
+   See https://github.com/Bioconductor/SparseArray/issues/9 */
+#undef match
+#include <omp.h>
+#endif
 
 /*
 #include <time.h>
 static double cumulated_time = 0.0;
 static clock_t clock0;
 
-static void start_clock()
+static void start_clock(void)
 {
 	clock0 = clock();
 }
-static void stop_clock()
+static void stop_clock(void)
 {
 	cumulated_time += ((double) clock() - clock0) / CLOCKS_PER_SEC;
 }
@@ -27,7 +36,7 @@ static void init_clock(const char *msg)
 	cumulated_time = 0.0;
 	clock0 = clock();
 }
-static void print_elapsed_time()
+static void print_elapsed_time(void)
 {
 	stop_clock();
 	printf("%8.6f s\n", cumulated_time);
@@ -89,7 +98,7 @@ static void init_NCList(NCList *nclist)
 
 
 /****************************************************************************
- * Utilities to walk on an NCList structure non-recursively
+ * NCList walking stack: used to walk on an NCList structure non-recursively
  */
 
 typedef struct NCList_walking_stack_elt_t {
@@ -103,86 +112,77 @@ typedef struct NCList_walking_stack_elt_t {
 #define	GET_RGID(stack_elt) \
 	((stack_elt)->parent_nclist->rgidbuf[(stack_elt)->n])
 
-static NCListWalkingStackElt *NCList_walking_stack = NULL;
-static int NCList_walking_stack_maxdepth = 0;
-static int NCList_walking_stack_depth = 0;
+typedef struct NCList_walking_stack {
+	NCListWalkingStackElt *elts;
+	int maxdepth;
+	int depth;
+} NCListWalkingStack;
 
-#define	RESET_NCLIST_WALKING_STACK() NCList_walking_stack_depth = 0
-
-/* Must NOT be called when 'NCList_walking_stack_depth' is 0 (i.e. when stack
-   in empty). */
-static NCListWalkingStackElt *pop_NCListWalkingStackElt()
+/* Must NOT be called when 'stack->depth' is 0 (i.e. when stack is empty). */
+static NCListWalkingStackElt *
+		pop_NCListWalkingStackElt(NCListWalkingStack *stack)
 {
-	NCList_walking_stack_depth--;
-	return NCList_walking_stack + NCList_walking_stack_depth;
+	stack->depth--;
+	return stack->elts + stack->depth;
 }
 
-/* Must NOT be called when 'NCList_walking_stack_depth' is 0 (i.e. when stack
-   in empty). */
-static NCListWalkingStackElt *peek_NCListWalkingStackElt()
+/* Must NOT be called when 'stack->depth' is 0 (i.e. when stack is empty). */
+static NCListWalkingStackElt *
+		peek_NCListWalkingStackElt(NCListWalkingStack *stack)
 {
-	return NCList_walking_stack + NCList_walking_stack_depth - 1;
+	return stack->elts + stack->depth - 1;
 }
 
-static void extend_NCList_walking_stack()
+static void extend_NCListWalkingStack(NCListWalkingStack *stack)
 {
-	int new_maxdepth;
-
-	new_maxdepth = get_new_maxdepth(NCList_walking_stack_maxdepth);
-	NCList_walking_stack = (NCListWalkingStackElt *)
-			realloc2(NCList_walking_stack,
-				 new_maxdepth,
-				 NCList_walking_stack_maxdepth,
-				 sizeof(NCListWalkingStackElt));
-	NCList_walking_stack_maxdepth = new_maxdepth;
+	int new_maxdepth = get_new_maxdepth(stack->maxdepth);
+	stack->elts = (NCListWalkingStackElt *)
+		realloc2(stack->elts, new_maxdepth, stack->maxdepth,
+			 sizeof(NCListWalkingStackElt));
+	stack->maxdepth = new_maxdepth;
 	return;
 }
 
-/* Return a pointer to n-th child. */
-static const NCList *move_to_child(const NCList *parent_nclist, int n)
+/* Returns a pointer to n-th child. */
+static const NCList *move_to_child(NCListWalkingStack *stack,
+				   const NCList *parent_nclist, int n)
 {
-	NCListWalkingStackElt *stack_elt;
-
-	if (NCList_walking_stack_depth == NCList_walking_stack_maxdepth)
-		extend_NCList_walking_stack();
-	stack_elt = NCList_walking_stack + NCList_walking_stack_depth++;
+	if (stack->depth == stack->maxdepth)
+		extend_NCListWalkingStack(stack);
+	NCListWalkingStackElt *stack_elt = stack->elts + stack->depth++;
 	stack_elt->parent_nclist = parent_nclist;
 	stack_elt->n = n;
 	return GET_NCLIST(stack_elt);
 }
 
-/* Must NOT be called when 'NCList_walking_stack_depth' is 0 (i.e. when stack
-   in empty). */
-static const NCList *move_to_right_sibling_or_uncle(const NCList *nclist)
+/* Must NOT be called when 'stack->depth' is 0 (i.e. when stack is empty). */
+static const NCList *move_to_right_sibling_or_uncle(NCListWalkingStack *stack,
+						    const NCList *nclist)
 {
-	NCListWalkingStackElt *stack_elt;
-
-	stack_elt = NCList_walking_stack + NCList_walking_stack_depth;
+	NCListWalkingStackElt *stack_elt = stack->elts + stack->depth;
 	do {
 		stack_elt--;
 		if (++(stack_elt->n) < stack_elt->parent_nclist->nchildren)
 			return ++nclist;
 		nclist = stack_elt->parent_nclist;
-	} while (--NCList_walking_stack_depth != 0);
+	} while (--stack->depth != 0);
 	return NULL;
 }
 
-/* Must NOT be called when 'NCList_walking_stack_depth' is 0 (i.e. when stack
-   in empty). */
-static const NCList *move_to_right_uncle()
+/* Must NOT be called when 'stack->depth' is 0 (i.e. when stack is empty). */
+static const NCList *move_to_right_uncle(NCListWalkingStack *stack)
 {
-	const NCList *parent_nclist;
-
-	parent_nclist = pop_NCListWalkingStackElt()->parent_nclist;
-	if (NCList_walking_stack_depth == 0)
+	const NCList *parent_nclist =
+			pop_NCListWalkingStackElt(stack)->parent_nclist;
+	if (stack->depth == 0)
 		return NULL;
-	return move_to_right_sibling_or_uncle(parent_nclist);
+	return move_to_right_sibling_or_uncle(stack, parent_nclist);
 }
 
-static const NCList *move_down(const NCList *nclist)
+static const NCList *move_down(NCListWalkingStack *stack, const NCList *nclist)
 {
 	while (nclist->nchildren != 0)
-		nclist = move_to_child(nclist, 0);
+		nclist = move_to_child(stack, nclist, 0);
 	return nclist;
 }
 
@@ -191,22 +191,24 @@ static const NCList *move_down(const NCList *nclist)
    from left to right. For a top-down walk that visits the entire tree (i.e.
    "complete walk") do:
 
-	RESET_NCLIST_WALKING_STACK();
+	NCListWalkingStack stack;
+	stack.depth = 0;
 	for (nclist = top_nclist;
 	     nclist != NULL;
-	     nclist = next_top_down(nclist))
+	     nclist = next_top_down(&stack, nclist))
 	{
 		treat nclist
 	}
  */
-static const NCList *next_top_down(const NCList *nclist)
+static const NCList *next_top_down(NCListWalkingStack *stack,
+				   const NCList *nclist)
 {
 	/* Try to move to first child, if any. */
 	if (nclist->nchildren != 0)
-		return move_to_child(nclist, 0);
-	if (NCList_walking_stack_depth == 0)
+		return move_to_child(stack, nclist, 0);
+	if (stack->depth == 0)
 		return NULL;
-	return move_to_right_sibling_or_uncle(nclist);
+	return move_to_right_sibling_or_uncle(stack, nclist);
 }
 
 /*
@@ -214,31 +216,54 @@ static const NCList *next_top_down(const NCList *nclist)
    For a bottom-up walk that visits the entire tree (i.e. "complete walk"),
    do:
 
-	RESET_NCLIST_WALKING_STACK();
-	for (nclist = move_down(top_nclist);
+	NCListWalkingStack stack;
+	stack.depth = 0;
+	for (nclist = move_down(&stack, top_nclist);
 	     nclist != NULL;
-	     nclist = next_bottom_up())
+	     nclist = next_bottom_up(&stack))
 	{
 		treat nclist
 	}
 */
-static const NCList *next_bottom_up()
+static const NCList *next_bottom_up(NCListWalkingStack *stack)
 {
-	NCListWalkingStackElt *stack_elt;
-	const NCList *parent_nclist;
-
-	if (NCList_walking_stack_depth == 0)
+	if (stack->depth == 0)
 		return NULL;
-	stack_elt = peek_NCListWalkingStackElt();
+	NCListWalkingStackElt *stack_elt = peek_NCListWalkingStackElt(stack);
 	stack_elt->n++;
-	parent_nclist = stack_elt->parent_nclist;
+	const NCList *parent_nclist = stack_elt->parent_nclist;
 	if (stack_elt->n < parent_nclist->nchildren) {
 		/* Move down thru the next children. */
-		return move_down(GET_NCLIST(stack_elt));
+		return move_down(stack, GET_NCLIST(stack_elt));
 	}
 	/* All children have been treated --> move 1 level up. */
-	NCList_walking_stack_depth--;
+	stack->depth--;
 	return parent_nclist;
+}
+
+
+/****************************************************************************
+ * get_empty_walking_stack()
+ */
+
+static NCListWalkingStack* get_empty_walking_stack(void)
+{
+	NCListWalkingStack *stack;
+#ifdef _OPENMP
+#define	STACK_POOL_SIZE 20
+	/* 1 stack per max number of threads. */
+	static NCListWalkingStack stack_pool[STACK_POOL_SIZE];
+	int thread_num = omp_get_thread_num();
+	if (thread_num >= STACK_POOL_SIZE)
+		error("IRanges internal error in get_empty_walking_stack(): "
+		      "thread_num >= STACK_POOL_SIZE");
+	stack = stack_pool + thread_num;
+#else
+	static NCListWalkingStack global_stack;
+	stack = &global_stack;
+#endif
+	stack->depth = 0;
+	return stack;
 }
 
 
@@ -247,31 +272,27 @@ static const NCList *next_bottom_up()
  */
 
 /*
-static void print_NCList_walking_stack()
+static void print_NCListWalkingStack(NCListWalkingStack *stack)
 {
-	int d;
-
-	printf("NCList_walking_stack:");
-	for (d = 0; d < NCList_walking_stack_depth; d++)
-		printf(" %d", NCList_walking_stack[d].n);
+	printf("NCListWalkingStack:");
+	for (int d = 0; d < stack->depth; d++)
+		printf(" %d", stack->elts[d].n);
 	printf("\n");
 	return;
 }
 
 static void print_NCList_node(const NCList *nclist, int depth)
 {
-	int d, n;
-
-	for (d = 0; d < depth; d++) printf("-"); printf(" ");
+	for (int d = 0; d < depth; d++) printf("-"); printf(" ");
 	printf("NCList node at address %p:\n", nclist);
 
-	for (d = 0; d < depth; d++) printf("-"); printf(" ");
+	for (int d = 0; d < depth; d++) printf("-"); printf(" ");
 	printf("  buflength=%d; nchildren=%d\n",
 	       nclist->buflength, nclist->nchildren);
 
-	for (d = 0; d < depth; d++) printf("-"); printf(" ");
+	for (int d = 0; d < depth; d++) printf("-"); printf(" ");
 	printf("  rgidbuf:");
-	for (n = 0; n < nclist->nchildren; n++)
+	for (int n = 0; n < nclist->nchildren; n++)
 		printf(" %d", nclist->rgidbuf[n]);
 	printf("\n");
 	return;
@@ -279,26 +300,22 @@ static void print_NCList_node(const NCList *nclist, int depth)
 
 static void print_NCList_rec(const NCList *nclist, int depth)
 {
-	int n;
-
 	print_NCList_node(nclist, depth);
-	for (n = 0; n < nclist->nchildren; n++)
+	for (int n = 0; n < nclist->nchildren; n++)
 		print_NCList_rec(nclist->childrenbuf + n, depth + 1);
 	return;
 }
 
 static void test_complete_top_down_walk(const NCList *top_nclist)
 {
-	const NCList *nclist;
-
+	NCListWalkingStack *stack = get_empty_walking_stack();
 	printf("======= START complete top-down walk ========\n");
-	RESET_NCLIST_WALKING_STACK();
-	for (nclist = top_nclist;
+	for (const NCList *nclist = top_nclist;
 	     nclist != NULL;
-	     nclist = next_top_down(nclist))
+	     nclist = next_top_down(stack, nclist))
 	{
-		print_NCList_walking_stack();
-		print_NCList_node(nclist, NCList_walking_stack_depth);
+		print_NCListWalkingStack(stack);
+		print_NCList_node(nclist, stack->depth);
 		printf("\n"); fflush(stdout);
 	}
 	printf("======== END complete top-down walk =========\n");
@@ -307,16 +324,14 @@ static void test_complete_top_down_walk(const NCList *top_nclist)
 
 static void test_complete_bottom_up_walk(const NCList *top_nclist)
 {
-	const NCList *nclist;
-
+	NCListWalkingStack *stack = get_empty_walking_stack();
 	printf("======= START complete bottom-up walk =======\n");
-	RESET_NCLIST_WALKING_STACK();
-	for (nclist = move_down(top_nclist);
+	for (const NCList *nclist = move_down(stack, top_nclist);
 	     nclist != NULL;
-	     nclist = next_bottom_up())
+	     nclist = next_bottom_up(stack))
 	{
-		print_NCList_walking_stack();
-		print_NCList_node(nclist, NCList_walking_stack_depth);
+		print_NCListWalkingStack(stack);
+		print_NCList_node(nclist, stack->depth);
 		printf("\n"); fflush(stdout);
 	}
 	printf("======== END complete bottom-up walk ========\n");
@@ -331,13 +346,11 @@ static void test_complete_bottom_up_walk(const NCList *top_nclist)
 
 static void free_NCList(const NCList *top_nclist)
 {
-	const NCList *nclist;
-
 	/* Complete bottom-up walk. */
-	RESET_NCLIST_WALKING_STACK();
-	for (nclist = move_down(top_nclist);
+	NCListWalkingStack *stack = get_empty_walking_stack();
+	for (const NCList *nclist = move_down(stack, top_nclist);
 	     nclist != NULL;
-	     nclist = next_bottom_up())
+	     nclist = next_bottom_up(stack))
 	{
 		if (nclist->buflength != 0) {
 			free(nclist->childrenbuf);
@@ -443,7 +456,7 @@ static NCListBuildingStackElt append_NCList_elt(NCList *landing_nclist,
 	return stack_elt;
 }
 
-static void extend_NCList_building_stack()
+static void extend_NCList_building_stack(void)
 {
 	int new_maxdepth;
 
@@ -549,23 +562,19 @@ SEXP C_build_NCList(SEXP nclist_xp, SEXP x_start, SEXP x_end, SEXP x_subset)
 
 static int compute_NCListAsINTSXP_length(const NCList *top_nclist)
 {
-	unsigned int ans_len;
-	const NCList *nclist;
-	int nchildren;
-
-	ans_len = 0U;
+	unsigned int ans_len = 0U;
 	/* Complete bottom-up walk (top-down walk would also work). */
-	RESET_NCLIST_WALKING_STACK();
-	for (nclist = move_down(top_nclist);
+	NCListWalkingStack *stack = get_empty_walking_stack();
+	for (const NCList *nclist = move_down(stack, top_nclist);
 	     nclist != NULL;
-	     nclist = next_bottom_up())
+	     nclist = next_bottom_up(stack))
 	{
-		if (NCList_walking_stack_depth > NCListAsINTSXP_MAX_DEPTH)
+		if (stack->depth > NCListAsINTSXP_MAX_DEPTH)
 			error("compute_NCListAsINTSXP_length: "
 			      "NCList object is too deep (has more "
 			      "than\n  %d levels of nested ranges)",
 			      NCListAsINTSXP_MAX_DEPTH);
-		nchildren = nclist->nchildren;
+		int nchildren = nclist->nchildren;
 		if (nchildren == 0)
 			continue;
 		ans_len += 1U + 2U * (unsigned int) nchildren;
@@ -628,7 +637,7 @@ SEXP C_new_NCListAsINTSXP_from_NCList(SEXP nclist_xp)
  */
 
 /* Recursive! 
-   Print 1 line per range in 'nclist'. Return max depth. */
+   Print 1 line per range in 'nclist'. Returns max depth. */
 static int print_NCListAsINTSXP_rec(const int *nclist,
 				    const int *x_start_p, const int *x_end_p,
 				    int depth, const char *format)
@@ -671,7 +680,8 @@ SEXP C_print_NCListAsINTSXP(SEXP x_nclist, SEXP x_start, SEXP x_end)
 		maxdepth = 0;
 	} else {
 		max_digits = (int) log10((double) x_len) + 1;
-		sprintf(format, "%c0%d%c", '%', max_digits, 'd');
+		snprintf(format, sizeof(format),
+			 "%c0%d%c", '%', max_digits, 'd');
 		maxdepth = print_NCListAsINTSXP_rec(top_nclist,
 						    x_start_p, x_end_p,
 						    1, format);
@@ -708,7 +718,6 @@ typedef struct backpack_t {
 	int select_mode;
 	int circle_len;
 	int pp_is_q;
-	IntAE *hits;
 	int *direct_out;
 
 	/* Members set by update_backpack(). */
@@ -716,6 +725,7 @@ typedef struct backpack_t {
 	int y_start;
 	int y_end;
 	int y_space;
+	IntAE *xh_buf;
 	int min_x_end;
 	int max_x_start;
 } Backpack;
@@ -846,44 +856,11 @@ static int is_hit(int rgid, const Backpack *backpack)
 	return backpack->is_hit_fun(rgid, backpack);
 }
 
-static void report_hit(int rgid, const Backpack *backpack)
-{
-	int rgid1, q_rgid, s_rgid1, *selection_p;
-
-	rgid1 = rgid + 1;  /* 1-based */
-	if (backpack->select_mode == ALL_HITS) {
-		/* Report the hit. */
-		IntAE_insert_at(backpack->hits,
-				IntAE_get_nelt(backpack->hits), rgid1);
-		return;
-	}
-	/* Update current selection if necessary. */
-	if (backpack->pp_is_q) {
-		q_rgid = rgid;
-		s_rgid1 = backpack->y_rgid + 1;
-	} else {
-		q_rgid = backpack->y_rgid;
-		s_rgid1 = rgid1;
-	}
-	selection_p = backpack->direct_out + q_rgid;
-	if (backpack->select_mode == COUNT_HITS) {
-		(*selection_p)++;
-		return;
-	}
-	if (*selection_p == NA_INTEGER
-	 || (backpack->select_mode == FIRST_HIT) ==
-	    (s_rgid1 < *selection_p))
-		*selection_p = s_rgid1;
-	return;
-}
-
 static Backpack prepare_backpack(const int *x_start_p, const int *x_end_p,
 				 const int *x_space_p, 
 				 int maxgap, int minoverlap,
 				 int overlap_type, int select_mode,
-				 int circle_len,
-				 int pp_is_q,
-				 IntAE *hits, int *direct_out)
+				 int circle_len, int pp_is_q, int *direct_out)
 {
 	Backpack backpack;
 
@@ -924,13 +901,13 @@ static Backpack prepare_backpack(const int *x_start_p, const int *x_end_p,
 	backpack.select_mode = select_mode;
 	backpack.circle_len = circle_len;
 	backpack.pp_is_q = pp_is_q;
-	backpack.hits = hits;
 	backpack.direct_out = direct_out;
 	return backpack;
 }
 
 static void update_backpack(Backpack *backpack, int y_rgid,
-			    int y_start, int y_end, int y_space)
+			    int y_start, int y_end, int y_space,
+			    IntAE *xh_buf)
 {
 	int slack, min_x_end, max_x_start, min_overlap_score0;
 
@@ -938,8 +915,10 @@ static void update_backpack(Backpack *backpack, int y_rgid,
 	backpack->y_start = y_start;
 	backpack->y_end = y_end;
 	backpack->y_space = y_space;
+	backpack->xh_buf = xh_buf;
 
 	/* set 'min_x_end' and 'max_x_start' */
+
 	if (backpack->overlap_type == TYPE_ANY) {
 		if (backpack->minoverlap == 0) {
 			slack = backpack->maxgap + 1;
@@ -1006,8 +985,134 @@ static void shift_y(Backpack *backpack, int shift)
 	return;
 }
 
+/* Thread-safe only if one of the two following conditions is satisfied:
+     (A1) backpack->select_mode == ALL_HITS && hits_buf != NULL
+     (A2) backpack->select_mode != ALL_HITS && !backpack->pp_is_q */
+static void report_hit(int rgid, const Backpack *backpack)
+{
+	int rgid1 = rgid + 1;  /* 1-based */
+	if (backpack->select_mode == ALL_HITS) {
+		/* Report the hit. */
+		IntAE_insert_at(backpack->xh_buf,
+				IntAE_get_nelt(backpack->xh_buf), rgid1);
+		return;
+	}
+	/* Update current selection if necessary. */
+	int q_rgid, s_rgid1;
+	if (backpack->pp_is_q) {
+		q_rgid = rgid;
+		s_rgid1 = backpack->y_rgid + 1;
+	} else {
+		q_rgid = backpack->y_rgid;
+		s_rgid1 = rgid1;
+	}
+	int *selection_p = backpack->direct_out + q_rgid;
+	if (backpack->select_mode == COUNT_HITS) {
+		(*selection_p)++;
+		return;
+	}
+	if (*selection_p == NA_INTEGER ||
+	    (backpack->select_mode == FIRST_HIT) == (s_rgid1 < *selection_p))
+		*selection_p = s_rgid1;
+	return;
+}
+
 typedef void (*GetYOverlapsFunType)(const void *x_nclist,
 				    const Backpack *backpack);
+
+/* Returns 1 if range y can be skipped, and 0 otherwise. */
+static int find_y_pp_overlaps(int j,
+		const int *y_start_p, const int *y_end_p, const int *y_space_p,
+		int select_mode,
+		const void *pp, GetYOverlapsFunType get_y_overlaps_fun,
+		Backpack *backpack, IntAE *xh_buf)
+{
+	int y_start = y_start_p[j];
+	int y_end = y_end_p[j];
+	if (y_end - y_start < backpack->min_overlap_score0)
+		return 1;
+	update_backpack(backpack, j,
+			y_start, y_end, y_space_p == NULL ? 0 : y_space_p[j],
+			xh_buf);
+	/* pass 0 */
+	get_y_overlaps_fun(pp, backpack);
+	if (backpack->circle_len == NA_INTEGER)
+		return 0;
+	if (select_mode == ARBITRARY_HIT && !backpack->pp_is_q &&
+	    backpack->direct_out[j] != NA_INTEGER)
+		return 0;
+	/* pass 1 */
+	shift_y(backpack, -backpack->circle_len);
+	get_y_overlaps_fun(pp, backpack);
+	if (select_mode == ARBITRARY_HIT && !backpack->pp_is_q &&
+	    backpack->direct_out[j] != NA_INTEGER)
+		return 0;
+	/* pass 2 */
+	shift_y(backpack, 2 * backpack->circle_len);
+	get_y_overlaps_fun(pp, backpack);
+	return 0;
+}
+
+/* 'select_mode' should only be ALL_HITS or COUNT_HITS. If the latter,
+   then 'circle_len' is expect to be != NA_INTEGER.
+   Thread-safe only if one of the three following conditions is satisfied:
+     (B1) hits_buf != NULL && select_mode == ALL_HITS
+     (B2) hits_buf != NULL && circle_len == NA_INTEGER
+     (B3) hits_buf != NULL && select_mode == COUNT_HITS && !pp_is_q */
+static void postprocess_y_hits(int j,
+		int select_mode, int circle_len, int pp_is_q,
+		IntAE *xh_buf, IntAE *yh_buf, IntAEAE *hits_buf,
+		int *direct_out)
+{
+	if (select_mode != ALL_HITS) {
+		if (select_mode != COUNT_HITS)
+			error("IRanges internal error in postprocess_hits(): "
+			      "'select_mode' must be ALL_HITS or COUNT_HITS");
+		if (circle_len == NA_INTEGER)
+			error("IRanges internal error in postprocess_hits(): "
+			      "'circle_len' cannot be NA when 'select_mode' "
+			      "is COUNT_HITS");
+	}
+	size_t buf_offset = hits_buf == NULL ? IntAE_get_nelt(yh_buf) : 0;
+	if (circle_len != NA_INTEGER) {
+		/* delete duplicates */
+		IntAE_qsort(xh_buf, buf_offset, 0);
+		IntAE_uniq(xh_buf, buf_offset);
+	}
+	size_t xh_buf_nelt = IntAE_get_nelt(xh_buf);
+	if (select_mode == ALL_HITS) {
+		if (hits_buf != NULL)
+			return;
+		j++;  /* 1-based */
+		for (size_t k = buf_offset; k < xh_buf_nelt; k++)
+			IntAE_insert_at(yh_buf, k, j);
+		return;
+	}
+	/* At this point 'select_mode' == COUNT_HITS and 'circle_len' != NA. */
+	if (pp_is_q) {
+		for (size_t k = buf_offset; k < xh_buf_nelt; k++)
+			direct_out[xh_buf->elts[k] - 1]++;
+	} else {
+		direct_out[j] += xh_buf_nelt - buf_offset;
+	}
+	if (hits_buf == NULL)
+		IntAE_set_nelt(xh_buf, buf_offset);
+	return;
+}
+
+#ifdef _OPENMP
+static int thread_safe(int select_mode, int circle_len, int pp_is_q,
+		       IntAEAE *hits_buf)
+{
+	int A1 = select_mode == ALL_HITS && hits_buf != NULL;
+	int A2 = select_mode != ALL_HITS && !pp_is_q;
+	int B123 = hits_buf != NULL &&
+			(select_mode == ALL_HITS ||
+			 circle_len == NA_INTEGER ||
+			 (select_mode == COUNT_HITS && !pp_is_q));
+	return (A1 || A2) && B123;
+}
+#endif
 
 static void pp_find_overlaps(
 		const int *q_start_p, const int *q_end_p,
@@ -1016,31 +1121,31 @@ static void pp_find_overlaps(
 		const int *s_space_p, const int *s_subset_p, int s_len,
 		int maxgap, int minoverlap,
 		int overlap_type, int select_mode,
-		int circle_len,
+		int circle_len, int nthread,
 		const void *pp, int pp_is_q,
 		GetYOverlapsFunType get_y_overlaps_fun,
-		IntAE *qh_buf, IntAE *sh_buf, int *direct_out)
+		IntAE *qh_buf, IntAE *sh_buf, IntAEAE *hits_buf,
+		int *direct_out)
 {
-	const int *x_start_p, *x_end_p, *x_space_p,
-		  *y_start_p, *y_end_p, *y_space_p, *y_subset_p;
-	int y_len, backpack_select_mode,
-	    i, j, y_start, y_end, old_nhit, new_nhit, k;
-	IntAE *xh_buf, *yh_buf;
-	Backpack backpack;
-
 	if (q_len == 0 || s_len == 0)
 		return;
+	const int *x_start_p, *x_end_p, *x_space_p,
+		  *y_start_p, *y_end_p, *y_space_p, *y_subset_p;
+	int y_len;
+	IntAE *xh_buf = NULL, *yh_buf = NULL;
 	if (pp_is_q) {
 		x_start_p = q_start_p;
 		x_end_p = q_end_p;
 		x_space_p = q_space_p;
-		xh_buf = qh_buf;
 		y_start_p = s_start_p;
 		y_end_p = s_end_p;
 		y_space_p = s_space_p;
 		y_subset_p = s_subset_p;
 		y_len = s_len;
-		yh_buf = sh_buf;
+		if (hits_buf == NULL) {
+			xh_buf = qh_buf;
+			yh_buf = sh_buf;
+		}
 		if (overlap_type == TYPE_WITHIN)
 			overlap_type = TYPE_EXTEND;
 		else if (overlap_type == TYPE_EXTEND)
@@ -1049,71 +1154,76 @@ static void pp_find_overlaps(
 		x_start_p = s_start_p;
 		x_end_p = s_end_p;
 		x_space_p = s_space_p;
-		xh_buf = sh_buf;
 		y_start_p = q_start_p;
 		y_end_p = q_end_p;
 		y_space_p = q_space_p;
 		y_subset_p = q_subset_p;
 		y_len = q_len;
-		yh_buf = qh_buf;
+		if (hits_buf == NULL) {
+			xh_buf = sh_buf;
+			yh_buf = qh_buf;
+		}
 	}
-	if (circle_len != NA_INTEGER && select_mode == COUNT_HITS)
+	int backpack_select_mode;
+	if (select_mode == COUNT_HITS && circle_len != NA_INTEGER) {
 		backpack_select_mode = ALL_HITS;
-	else
+	} else {
 		backpack_select_mode = select_mode;
-	backpack = prepare_backpack(x_start_p, x_end_p, x_space_p,
-				    maxgap, minoverlap,
-				    overlap_type, backpack_select_mode,
-				    circle_len, pp_is_q,
-				    xh_buf, direct_out);
-	for (i = 0; i < y_len; i++) {
-		j = y_subset_p == NULL ? i : y_subset_p[i];
-		y_start = y_start_p[j];
-		y_end = y_end_p[j];
-		if (y_end - y_start < backpack.min_overlap_score0)
-			continue;
-		update_backpack(&backpack, j, y_start, y_end,
-				y_space_p == NULL ? 0 : y_space_p[j]);
-		/* pass 0 */
-		get_y_overlaps_fun(pp, &backpack);
-		if (circle_len == NA_INTEGER)
-			goto life_is_good;
-		if (select_mode == ARBITRARY_HIT
-		 && !pp_is_q && direct_out[j] != NA_INTEGER)
-			goto life_is_good;
-		/* pass 1 */
-		shift_y(&backpack, - circle_len);
-		get_y_overlaps_fun(pp, &backpack);
-		if (select_mode == ARBITRARY_HIT
-		 && !pp_is_q && direct_out[j] != NA_INTEGER)
-			goto life_is_good;
-		/* pass 2 */
-		shift_y(&backpack, 2 * circle_len);
-		get_y_overlaps_fun(pp, &backpack);
-
-		life_is_good:
-		if (backpack_select_mode != ALL_HITS)
-			continue;
-		old_nhit = IntAE_get_nelt(yh_buf);
-		if (circle_len != NA_INTEGER) {
-			/* delete duplicates */
-			IntAE_qsort(xh_buf, old_nhit, 0);
-			IntAE_uniq(xh_buf, old_nhit);
+	}
+#ifdef _OPENMP
+	int safe = thread_safe(select_mode, circle_len, pp_is_q, hits_buf);
+	if (!safe)
+		nthread = 1;
+	//Rprintf("using %d thread%s\n", nthread, nthread == 1 ? "" : "s");
+	if (nthread == 1) {
+#endif
+		Backpack backpack = prepare_backpack(
+					x_start_p, x_end_p, x_space_p,
+					maxgap, minoverlap,
+					overlap_type, backpack_select_mode,
+					circle_len, pp_is_q, direct_out);
+		for (int i = 0; i < y_len; i++) {
+			int j = y_subset_p == NULL ? i : y_subset_p[i];
+			if (hits_buf != NULL)
+				xh_buf = hits_buf->elts[i];
+			int miss = find_y_pp_overlaps(j,
+					y_start_p, y_end_p, y_space_p,
+					select_mode,
+					pp, get_y_overlaps_fun,
+					&backpack, xh_buf);
+			if (miss || backpack_select_mode != ALL_HITS)
+				continue;
+			postprocess_y_hits(j,
+					select_mode, circle_len, pp_is_q,
+					xh_buf, yh_buf, hits_buf, direct_out);
 		}
-		new_nhit = IntAE_get_nelt(xh_buf);
-		if (select_mode != COUNT_HITS) {
-			j++;  /* 1-based */
-			for (k = old_nhit; k < new_nhit; k++)
-				IntAE_insert_at(yh_buf, k, j);
-			continue;
+#ifdef _OPENMP
+	} else {
+		/* Let's use multiple threads. */
+		int old_max_threads = omp_get_max_threads();
+		omp_set_num_threads(nthread);
+		#pragma omp parallel for schedule(static)
+		for (int i = 0; i < y_len; i++) {
+			Backpack backpack = prepare_backpack(
+					x_start_p, x_end_p, x_space_p,
+					maxgap, minoverlap,
+					overlap_type, backpack_select_mode,
+					circle_len, pp_is_q, direct_out);
+			int j = y_subset_p == NULL ? i : y_subset_p[i];
+			IntAE *xh_buf2 = hits_buf->elts[i];
+			int miss = find_y_pp_overlaps(j,
+					y_start_p, y_end_p, y_space_p,
+					select_mode,
+					pp, get_y_overlaps_fun,
+					&backpack, xh_buf2);
+			if (miss || backpack_select_mode != ALL_HITS)
+				continue;
+			postprocess_y_hits(j,
+					select_mode, circle_len, pp_is_q,
+					xh_buf2, yh_buf, hits_buf, direct_out);
 		}
-		if (pp_is_q) {
-			for (k = old_nhit; k < new_nhit; k++)
-				direct_out[xh_buf->elts[k] - 1]++;
-		} else {
-			direct_out[j] += new_nhit - old_nhit;
-		}
-		IntAE_set_nelt(xh_buf, old_nhit);
+		omp_set_num_threads(old_max_threads);
+#endif
 	}
 	return;
 }
@@ -1123,12 +1233,11 @@ static void pp_find_overlaps(
  * int_bsearch()
  */
 
-/*
- * 'subset_len' is assumed to be > 0.
- * Return the first index 'n' for which 'base[subset[n]] >= min', or
- * 'subset_len' if there is no such index.
- * TODO: Maybe move this to int_utils.c or sort_utils.c in S4Vectors/src/
- */
+/* 'subset_len' is assumed to be > 0.
+   Returns the first index 'n' for which 'base[subset[n]] >= min', or
+   'subset_len' if there is no such index.
+   TODO: Maybe move this to src/int_utils.c or src/sort_utils.c in S4Vectors
+   package. */
 static int int_bsearch(const int *subset, int subset_len, const int *base,
 		       int min)
 {
@@ -1218,23 +1327,20 @@ static int find_landing_child(const NCList *nclist, const Backpack *backpack)
 static void NCList_get_y_overlaps(const NCList *top_nclist,
 				  const Backpack *backpack)
 {
-	int n, rgid;
-	const NCList *nclist;
-	NCListWalkingStackElt *stack_elt;
-
 	/* Incomplete top-down walk: only a pruned version of the full tree
 	   (i.e. a subtree starting at the same top node) will be visited. */
-	RESET_NCLIST_WALKING_STACK();
-	n = find_landing_child(top_nclist, backpack);
+	NCListWalkingStack *stack = get_empty_walking_stack();
+	int n = find_landing_child(top_nclist, backpack);
 	if (n < 0)
 		return;
-	nclist = move_to_child(top_nclist, n);
+	const NCList *nclist = move_to_child(stack, top_nclist, n);
 	while (nclist != NULL) {
-		stack_elt = peek_NCListWalkingStackElt();
-		rgid = GET_RGID(stack_elt);
+		NCListWalkingStackElt *stack_elt =
+			peek_NCListWalkingStackElt(stack);
+		int rgid = GET_RGID(stack_elt);
 		if (backpack->x_start_p[rgid] > backpack->max_x_start) {
 			/* Skip all further siblings of 'nclist'. */
-			nclist = move_to_right_uncle();
+			nclist = move_to_right_uncle(stack);
 			continue;
 		}
 		if (is_hit(rgid, backpack)) {
@@ -1245,8 +1351,9 @@ static void NCList_get_y_overlaps(const NCList *top_nclist,
 		}
 		n = find_landing_child(nclist, backpack);
 		/* Skip first 'n' or all children of 'nclist'. */
-		nclist = n >= 0 ? move_to_child(nclist, n) :
-				  move_to_right_sibling_or_uncle(nclist);
+		nclist = n >= 0 ?
+			move_to_child(stack, nclist, n) :
+			move_to_right_sibling_or_uncle(stack, nclist);
 	}
 	return;
 }
@@ -1294,26 +1401,26 @@ static void NCListAsINTSXP_get_y_overlaps_rec(const int *x_nclist,
  * find_overlaps()
  */
 
-static int find_overlaps(
+static void find_overlaps(
 		const int *q_start_p, const int *q_end_p,
 		const int *q_space_p, const int *q_subset_p, int q_len,
 		const int *s_start_p, const int *s_end_p,
 		const int *s_space_p, const int *s_subset_p, int s_len,
 		int maxgap, int minoverlap,
 		int overlap_type, int select_mode,
-		int circle_len,
+		int circle_len, int nthread,
 		SEXP nclist_sxp, int pp_is_q,
-		IntAE *qh_buf, IntAE *sh_buf, int *direct_out)
+		IntAE *qh_buf, IntAE *sh_buf, IntAEAE *hits_buf,
+		int *direct_out)
 {
 	NCList nclist;
 	const void *pp;
 	GetYOverlapsFunType get_y_overlaps_fun;
 
 	if (q_len == 0 || s_len == 0)
-		return 0;
+		return;
 	if (nclist_sxp == R_NilValue) {
 		/* On-the-fly preprocessing. */
-		pp_is_q = q_len < s_len;
 		if (pp_is_q)
 			build_NCList(&nclist, q_start_p, q_end_p,
 					      q_subset_p, q_len);
@@ -1333,12 +1440,12 @@ static int find_overlaps(
 		s_start_p, s_end_p, s_space_p, s_subset_p, s_len,
 		maxgap, minoverlap,
 		overlap_type, select_mode,
-		circle_len,
+		circle_len, nthread,
 		pp, pp_is_q, get_y_overlaps_fun,
-		qh_buf, sh_buf, direct_out);
+		qh_buf, sh_buf, hits_buf, direct_out);
 	if (nclist_sxp == R_NilValue)
 		free_NCList(&nclist);
-	return pp_is_q;
+	return;
 }
 
 
@@ -1349,14 +1456,12 @@ static int find_overlaps(
 
 static int get_overlap_type(SEXP type)
 {
-	const char *type0;
-
 	if (!IS_CHARACTER(type) || LENGTH(type) != 1)
 		error("'type' must be a single string");
 	type = STRING_ELT(type, 0);
 	if (type == NA_STRING)
 		error("'type' cannot be NA");
-	type0 = CHAR(type);
+	const char *type0 = CHAR(type);
 	if (strcmp(type0, "any") == 0)
 		return TYPE_ANY;
 	if (strcmp(type0, "start") == 0)
@@ -1376,11 +1481,9 @@ static int get_overlap_type(SEXP type)
 
 static int get_maxgap0(SEXP maxgap, int overlap_type)
 {
-	int maxgap0;
-
 	if (!IS_INTEGER(maxgap) || LENGTH(maxgap) != 1)
 		error("'maxgap' must be a single integer");
-	maxgap0 = INTEGER(maxgap)[0];
+	int maxgap0 = INTEGER(maxgap)[0];
 	if (maxgap0 == NA_INTEGER)
 		error("'maxgap' cannot be NA");
 	if (maxgap0 < -1)
@@ -1392,11 +1495,9 @@ static int get_maxgap0(SEXP maxgap, int overlap_type)
 
 static int get_minoverlap0(SEXP minoverlap, int maxgap, int overlap_type)
 {
-	int minoverlap0;
-
 	if (!IS_INTEGER(minoverlap) || LENGTH(minoverlap) != 1)
 		error("'minoverlap' must be a single integer");
-	minoverlap0 = INTEGER(minoverlap)[0];
+	int minoverlap0 = INTEGER(minoverlap)[0];
 	if (minoverlap0 == NA_INTEGER)
 		error("'minoverlap' cannot be NA");
 	if (minoverlap0 < 0)
@@ -1409,15 +1510,55 @@ static int get_minoverlap0(SEXP minoverlap, int maxgap, int overlap_type)
 
 static int get_circle_length(SEXP circle_length)
 {
-	int circle_len;
-
 	if (!IS_INTEGER(circle_length) || LENGTH(circle_length) != 1)
 		error("'circle_length' must be a single integer");
-	circle_len = INTEGER(circle_length)[0];
+	int circle_len = INTEGER(circle_length)[0];
 	if (circle_len != NA_INTEGER && circle_len <= 0)
 		error("'circle_length' must be a single "
 		      "positive integer or NA");
 	return circle_len;
+}
+
+static int get_pp_is_q(int nclist_is_q, SEXP nclist, int q_len, int s_len)
+{
+	if (nclist_is_q != NA_INTEGER)
+		return nclist_is_q;
+	if (nclist != R_NilValue)
+		error("'nclist_is_q' cannot be NA when 'nclist' is not NULL");
+	return q_len < s_len;
+}
+
+/* Returned value is never greater than parallel::detectCores() or
+   omp_get_max_threads() or STACK_POOL_SIZE. */
+static int get_nthread0(SEXP nthread)
+{
+#ifdef _OPENMP
+	int nthread0 = INTEGER(nthread)[0];
+	/* Note that omp_get_num_procs() returns the same as
+	   parallel::detectCores(). */
+	int num_procs = omp_get_num_procs();
+	if (nthread0 == NA_INTEGER) {
+		/* No multithreading by default for now! See 'nthread' arg
+		   in man/findOverlaps-methods.Rd for more info. */
+		return 1;  // temporary!
+		nthread0 = num_procs / 3;
+	} else if (nthread0 > num_procs) {
+		nthread0 = num_procs;
+	}
+	if (nthread0 < 1)
+		return 1;
+	/* Note that the "initial" value returned by omp_get_max_threads(),
+	   that is, the value it returns **before** omp_set_num_threads() gets
+	   called, is controlled by environment variable OMP_NUM_THREADS. */
+	int max_threads = omp_get_max_threads();
+	if (nthread0 > max_threads)
+		nthread0 = max_threads;
+	if (nthread0 >= STACK_POOL_SIZE)
+		nthread0 = STACK_POOL_SIZE;
+	return nthread0;
+#else
+	return 1;
+#endif
 }
 
 static SEXP new_direct_out(int q_len, int select_mode)
@@ -1455,57 +1596,81 @@ SEXP C_find_overlaps_NCList(
 		SEXP s_start, SEXP s_end,
 		SEXP nclist, SEXP nclist_is_q,
 		SEXP maxgap, SEXP minoverlap, SEXP type, SEXP select,
-		SEXP circle_length)
+		SEXP circle_length, SEXP nthread)
 {
-	int q_len, s_len,
-	    maxgap0, minoverlap0, overlap_type, select_mode, circle_len,
-	    *direct_out, pp_is_q;
-	const int *q_start_p, *q_end_p, *s_start_p, *s_end_p;
-	IntAE *qh_buf, *sh_buf;
 	SEXP ans;
 
-	q_len = check_integer_pairs(q_start, q_end,
-				    &q_start_p, &q_end_p,
-				    "start(q)", "end(q)");
-	s_len = check_integer_pairs(s_start, s_end,
-				    &s_start_p, &s_end_p,
-				    "start(s)", "end(s)");
-	overlap_type = get_overlap_type(type);
-	maxgap0 = get_maxgap0(maxgap, overlap_type);
-	minoverlap0 = get_minoverlap0(minoverlap, maxgap0, overlap_type);
-	select_mode = get_select_mode(select);
-	circle_len = get_circle_length(circle_length);
+	const int *q_start_p, *q_end_p;
+	int q_len = check_integer_pairs(q_start, q_end,
+					&q_start_p, &q_end_p,
+					"start(q)", "end(q)");
+	const int *s_start_p, *s_end_p;
+	int s_len = check_integer_pairs(s_start, s_end,
+					&s_start_p, &s_end_p,
+					"start(s)", "end(s)");
+	int overlap_type = get_overlap_type(type);
+	int maxgap0 = get_maxgap0(maxgap, overlap_type);
+	int minoverlap0 = get_minoverlap0(minoverlap, maxgap0, overlap_type);
+	int select_mode = get_select_mode(select);
+	int circle_len = get_circle_length(circle_length);
+	int pp_is_q = get_pp_is_q(LOGICAL(nclist_is_q)[0],
+				  nclist, q_len, s_len);
+	int nthread0 = get_nthread0(nthread);
 
-	qh_buf = new_IntAE(0, 0, 0);
-	sh_buf = new_IntAE(0, 0, 0);
-	direct_out = NULL;
+	IntAE *qh_buf = NULL, *sh_buf = NULL;
+	IntAEAE *hits_buf = NULL;
+	if (select_mode == ALL_HITS || circle_len != NA_INTEGER) {
+		if (nthread0 == 1) {
+			qh_buf = new_IntAE(0, 0, 0);
+			sh_buf = new_IntAE(0, 0, 0);
+		} else {
+			size_t buflen = pp_is_q ? s_len : q_len;
+			hits_buf = new_IntAEAE(buflen, buflen);
+		}
+	}
+	int *direct_out = NULL;
 	if (select_mode != ALL_HITS) {
-		PROTECT(ans = new_direct_out(q_len, select_mode));
+		ans = PROTECT(new_direct_out(q_len, select_mode));
 		direct_out = INTEGER(ans);
 	}
 	//init_clock("find_overlaps: T2 = ");
-	pp_is_q = find_overlaps(
+	find_overlaps(
 		q_start_p, q_end_p, NULL, NULL, q_len,
 		s_start_p, s_end_p, NULL, NULL, s_len,
-		maxgap0, minoverlap0, overlap_type,
-		select_mode, circle_len,
-		nclist, LOGICAL(nclist_is_q)[0],
-		qh_buf, sh_buf, direct_out);
+		maxgap0, minoverlap0, overlap_type, select_mode,
+		circle_len, nthread0,
+		nclist, pp_is_q,
+		qh_buf, sh_buf, hits_buf, direct_out);
 	//print_elapsed_time();
 	if (select_mode != ALL_HITS) {
 		UNPROTECT(1);
 		return ans;
 	}
-	return new_Hits("SortedByQueryHits",
-			qh_buf->elts, sh_buf->elts, IntAE_get_nelt(qh_buf),
-			q_len, s_len, !pp_is_q);
+	return hits_buf == NULL ?
+		new_Hits("SortedByQueryHits",
+			 qh_buf->elts, sh_buf->elts, IntAE_get_nelt(qh_buf),
+			 q_len, s_len, !pp_is_q) :
+		new_SortedByQueryHits_from_IntAEAE(hits_buf,
+						   pp_is_q ? q_len : s_len,
+						   pp_is_q);
 }
 
 
 /****************************************************************************
  * C_find_overlaps_in_groups_NCList()
- *
- * --- .Call ENTRY POINT ---
+ */
+
+static const int *get_space_p(SEXP space, int expected_len, const char *prefix)
+{
+	if (space == R_NilValue)
+		return NULL;
+	if (LENGTH(space) != expected_len)
+		error("'%s_space' must have the length of '%s_start'",
+		      prefix, prefix);
+	return INTEGER(space);
+}
+
+/* --- .Call ENTRY POINT ---
  * Args:
  *   q_start, q_end, q_space: Integer vectors of same length (or NULL for
  *                   'q_space').
@@ -1535,73 +1700,61 @@ SEXP C_find_overlaps_in_groups_NCList(
 		SEXP maxgap, SEXP minoverlap, SEXP type, SEXP select,
 		SEXP circle_length)
 {
-	int q_len, s_len, NG1, NG2,
-	    maxgap0, minoverlap0, overlap_type, select_mode,
-	    NG, i, qi_len, si_len, *direct_out;
-	const int *q_start_p, *q_end_p, *q_space_p,
-		  *s_start_p, *s_end_p, *s_space_p;
-	CompressedIntsList_holder q_groups_holder, s_groups_holder;
-	Ints_holder qi_group_holder, si_group_holder;
-	IntAE *qh_buf, *sh_buf;
-	SEXP ans;
-
 	/* Check query. */
-	q_len = check_integer_pairs(q_start, q_end,
-				    &q_start_p, &q_end_p,
-				    "q_start", "q_end");
-	if (q_space == R_NilValue) {
-		q_space_p = NULL;
-	} else {
-		if (LENGTH(q_space) != q_len)
-			error("'q_space' must have the length of 'q_start'");
-		q_space_p = INTEGER(q_space);
-	}
-	q_groups_holder = _hold_CompressedIntegerList(q_groups);
-	NG1 = _get_length_from_CompressedIntsList_holder(&q_groups_holder);
+	const int *q_start_p, *q_end_p;
+	int q_len = check_integer_pairs(q_start, q_end,
+					&q_start_p, &q_end_p,
+					"q_start", "q_end");
+	const int *q_space_p = get_space_p(q_space, q_len, "q");
+	CompressedIntsList_holder q_groups_holder =
+			_hold_CompressedIntegerList(q_groups);
+	int NG1 = _get_length_from_CompressedIntsList_holder(&q_groups_holder);
 
 	/* Check subject. */
-	s_len = check_integer_pairs(s_start, s_end,
-				    &s_start_p, &s_end_p,
-				    "s_start", "s_end");
-	if (s_space == R_NilValue) {
-		s_space_p = NULL;
-	} else {
-		if (LENGTH(s_space) != s_len)
-			error("'s_space' must have the length of 's_start'");
-		s_space_p = INTEGER(s_space);
-	}
-	s_groups_holder = _hold_CompressedIntegerList(s_groups);
-	NG2 = _get_length_from_CompressedIntsList_holder(&s_groups_holder);
+	const int *s_start_p, *s_end_p;
+	int s_len = check_integer_pairs(s_start, s_end,
+					&s_start_p, &s_end_p,
+					"s_start", "s_end");
+	const int *s_space_p = get_space_p(s_space, s_len, "s");
+	CompressedIntsList_holder s_groups_holder =
+			_hold_CompressedIntegerList(s_groups);
+	int NG2 = _get_length_from_CompressedIntsList_holder(&s_groups_holder);
 
-	overlap_type = get_overlap_type(type);
-	maxgap0 = get_maxgap0(maxgap, overlap_type);
-	minoverlap0 = get_minoverlap0(minoverlap, maxgap0, overlap_type);
-	select_mode = get_select_mode(select);
+	int overlap_type = get_overlap_type(type);
+	int maxgap0 = get_maxgap0(maxgap, overlap_type);
+	int minoverlap0 = get_minoverlap0(minoverlap, maxgap0, overlap_type);
+	int select_mode = get_select_mode(select);
 
-	qh_buf = new_IntAE(0, 0, 0);
-	sh_buf = new_IntAE(0, 0, 0);
-	direct_out = NULL;
+	IntAE *qh_buf = new_IntAE(0, 0, 0);
+	IntAE *sh_buf = new_IntAE(0, 0, 0);
+	SEXP ans;
+	int *direct_out = NULL;
 	if (select_mode != ALL_HITS) {
 		PROTECT(ans = new_direct_out(q_len, select_mode));
 		direct_out = INTEGER(ans);
 	}
-	NG = NG1 <= NG2 ? NG1 : NG2;
-	for (i = 0; i < NG; i++) {
-		qi_group_holder = _get_elt_from_CompressedIntsList_holder(
-					&q_groups_holder, i);
-		qi_len = qi_group_holder.length;
-		si_group_holder = _get_elt_from_CompressedIntsList_holder(
-					&s_groups_holder, i);
-		si_len = si_group_holder.length;
+	int NG = NG1 <= NG2 ? NG1 : NG2;
+	for (int i = 0; i < NG; i++) {
+		Ints_holder qi_group_holder =
+			_get_elt_from_CompressedIntsList_holder(
+						&q_groups_holder, i);
+		int qi_len = qi_group_holder.length;
+		Ints_holder si_group_holder =
+			_get_elt_from_CompressedIntsList_holder(
+						&s_groups_holder, i);
+		int si_len = si_group_holder.length;
+		SEXP nclist = VECTOR_ELT(nclists, i);
+		int pp_is_q = get_pp_is_q(LOGICAL(nclist_is_q)[i],
+					  nclist, qi_len, si_len);
 		find_overlaps(
 			q_start_p, q_end_p, q_space_p,
 			qi_group_holder.ptr, qi_len,
 			s_start_p, s_end_p, s_space_p,
 			si_group_holder.ptr, si_len,
-			maxgap0, minoverlap0, overlap_type,
-			select_mode, INTEGER(circle_length)[i],
-			VECTOR_ELT(nclists, i), LOGICAL(nclist_is_q)[i],
-			qh_buf, sh_buf, direct_out);
+			maxgap0, minoverlap0, overlap_type, select_mode,
+			INTEGER(circle_length)[i], 1,
+			nclist, pp_is_q,
+			qh_buf, sh_buf, NULL, direct_out);
 	}
 	if (select_mode != ALL_HITS) {
 		UNPROTECT(1);

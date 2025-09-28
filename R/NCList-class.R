@@ -172,7 +172,8 @@ findOverlaps_NCList <- function(query, subject,
              maxgap=-1L, minoverlap=0L,
              type=c("any", "start", "end", "within", "extend", "equal"),
              select=c("all", "first", "last", "arbitrary", "count"),
-             circle.length=NA_integer_)
+             circle.length=NA_integer_,
+             nthread=NA)
 {
     if (!(is(query, "IntegerRanges") && is(subject, "IntegerRanges")))
         stop("'query' and 'subject' must be IntegerRanges objects")
@@ -191,6 +192,11 @@ findOverlaps_NCList <- function(query, subject,
     select <- match.arg(select)
     circle.length <- .normarg_circle.length1(circle.length)
 
+    if (!isSingleNumberOrNA(nthread))
+        stop("'nthread' must be a single integer")
+    if (!is.integer(nthread))
+        nthread <- as.integer(nthread)
+
     if (is(subject, "NCList")) {
         nclist <- subject@nclist
         nclist_is_q <- FALSE
@@ -206,11 +212,13 @@ findOverlaps_NCList <- function(query, subject,
         query <- .shift_ranges_to_first_circle(query, circle.length)
         subject <- .shift_ranges_to_first_circle(subject, circle.length)
     }
+    S4Vectors:::AEbufs_use_malloc(TRUE)
+    on.exit({S4Vectors:::AEbufs_free(); S4Vectors:::AEbufs_use_malloc(FALSE)})
     .Call2("C_find_overlaps_NCList",
            start(query), end(query),
            start(subject), end(subject),
            nclist, nclist_is_q,
-           maxgap, minoverlap, type, select, circle.length,
+           maxgap, minoverlap, type, select, circle.length, nthread,
            PACKAGE="IRanges")
 }
 
