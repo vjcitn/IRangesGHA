@@ -166,6 +166,24 @@ setMethod("bindROWS", "NCList",
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ### findOverlaps_NCList()
 ###
+### Note that, for the "Auto-Extending buffers" used at the C level for
+### temporary storage of the hits, we use malloc-based buffers (a.k.a.
+### user-controlled memory) rather than R_alloc-based buffers (a.k.a.
+### transient memory). This choice was based on the following results:
+###
+###     library(IRanges)
+###     set.seed(123)
+###     query <- IRanges(sample(2e8, 9e4, replace=TRUE),
+###                      width=sample(20000, 9e4, replace=TRUE))
+###     subject <- IRanges(sample(2e8, 4e7, replace=TRUE), width=100)
+###     findOverlaps(query, subject)  # ==> 182M hits!
+###
+### Time / memory usage of the findOverlaps() call:
+###   - using R_alloc-based buffers: 15.1s / 7.4g
+###   - using malloc-based buffers:  13.8s / 3.2g
+###
+### Results obtained with R 4.5.1 + IRanges 2.43.3 + GenomicRanges 1.61.5
+### on a DELL XPS 15 laptop with 32g of RAM running Ubuntu 24.04.
 
 ### NOT exported.
 findOverlaps_NCList <- function(query, subject,
@@ -332,6 +350,27 @@ setAs("IntegerRangesList", "NCLists", function(from) NCLists(from))
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ### find_overlaps_in_groups_NCList()
 ###
+### Note that, for the "Auto-Extending buffers" used at the C level for
+### temporary storage of the hits, we use malloc-based buffers (a.k.a.
+### user-controlled memory) rather than R_alloc-based buffers (a.k.a.
+### transient memory). This choice was based on the following results:
+###
+###     library(GenomicRanges)
+###     set.seed(123)
+###     query <- IRanges(sample(1e8, 5.64e5, replace=TRUE),
+###                      width=sample(20000, 5.64e5, replace=TRUE))
+###     query <- GRanges(sample(LETTERS, length(query), replace=TRUE), query)
+###     subject <- IRanges(sample(1e8, 7.1e7, replace=TRUE), width=100)
+###     subject <- GRanges(sample(LETTERS, length(subject), replace=TRUE),
+###                        subject)
+###     findOverlaps(query, subject)  # ==> 155M hits!
+###
+### Time / memory usage of the findOverlaps() call:
+###   - using R_alloc-based buffers: 24.0s / 7.2g
+###   - using malloc-based buffers:  23.1s / 5.3g
+###
+### Results obtained with R 4.5.1 + IRanges 2.43.3 + GenomicRanges 1.61.5
+### on a DELL XPS 15 laptop with 32g of RAM running Ubuntu 24.04.
 
 ### NOT exported. Workhorse behind findOverlaps_NCLists() below and behind
 ### GenomicRanges:::findOverlaps_GNCList().
@@ -370,6 +409,8 @@ find_overlaps_in_groups_NCList <- function(
     s_circle_len <- circle.length
     s_circle_len[which(!nclist_is_q)] <- NA_integer_
     s <- .shift_ranges_in_groups_to_first_circle(s, s_groups, s_circle_len)
+    S4Vectors:::AEbufs_use_malloc(TRUE)
+    on.exit({S4Vectors:::AEbufs_free(); S4Vectors:::AEbufs_use_malloc(FALSE)})
     .Call2("C_find_overlaps_in_groups_NCList",
            start(q), end(q), q_space, q_groups,
            start(s), end(s), s_space, s_groups,
