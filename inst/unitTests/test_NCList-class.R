@@ -191,15 +191,14 @@ test_findOverlaps_NCList <- function()
     }
 }
 
-## FWIW here's how to generate the IRanges objects 'query' and 'subject' used
-## in the test below in Python using the iranges module, and how to find the
-## overlaps:
+## FWIW the BiocPy equivalent of 'query' and 'subject' used in the test below
+## can be obtained with:
 ##   from iranges import IRanges
 ##   query = IRanges([1 for i in range(400001)], width=range(400001))
 ##   subject = IRanges([790000-i for i in range(400001)], width=range(400001))
-##   res = subject.find_overlaps(query)
+## To find the overlaps (and time the operation):
 ##   import time
-##   t0 = time.time(); subject.find_overlaps(query); time.time() - t0
+##   t0 = time.time(); res = subject.find_overlaps(query); time.time() - t0
 test_findOverlaps_NCList_deeply_nested <- function()
 {
     query <- IRanges(start=1, width=0:400000)

@@ -1095,8 +1095,7 @@ static void postprocess_y_hits(int j,
 	} else {
 		direct_out[j] += xh_buf_nelt - buf_offset;
 	}
-	if (hits_buf == NULL)
-		IntAE_set_nelt(xh_buf, buf_offset);
+	IntAE_set_nelt(xh_buf, buf_offset);
 	return;
 }
 
@@ -1113,6 +1112,24 @@ static int thread_safe(int select_mode, int circle_len, int pp_is_q,
 	return (A1 || A2) && B123;
 }
 #endif
+
+/* Assumes 'ae' is malloc-based. Disaster guaranteed if it's R_alloc-based! */
+static void prune_IntAE(IntAE *ae)
+{
+	size_t nelt = IntAE_get_nelt(ae);
+	if (nelt == ae->_buflength)
+		return;
+	if (nelt == 0) {
+		free(ae->elts);
+	} else {
+		void *new_ptr = realloc(ae->elts, sizeof(int) * nelt);
+		if (new_ptr == NULL)
+			error("IRanges internal error in prune_IntAE(): "
+			      "cannot reallocate memory");
+		ae->elts = new_ptr;
+	}
+	return;
+}
 
 static void pp_find_overlaps(
 		const int *q_start_p, const int *q_end_p,
@@ -1196,6 +1213,8 @@ static void pp_find_overlaps(
 			postprocess_y_hits(j,
 					select_mode, circle_len, pp_is_q,
 					xh_buf, yh_buf, hits_buf, direct_out);
+			if (hits_buf != NULL)
+				prune_IntAE(xh_buf);
 		}
 #ifdef _OPENMP
 	} else {
@@ -1221,6 +1240,8 @@ static void pp_find_overlaps(
 			postprocess_y_hits(j,
 					select_mode, circle_len, pp_is_q,
 					xh_buf2, yh_buf, hits_buf, direct_out);
+			if (hits_buf != NULL)
+				prune_IntAE(xh_buf2);
 		}
 		omp_set_num_threads(old_max_threads);
 	}

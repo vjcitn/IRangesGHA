@@ -184,6 +184,18 @@ setMethod("bindROWS", "NCList",
 ###
 ### Results obtained with R 4.5.1 + IRanges 2.43.3 + GenomicRanges 1.61.5
 ### on a DELL XPS 15 laptop with 32g of RAM running Ubuntu 24.04.
+###
+### FWIW the BiocPy equivalent of 'query' and 'subject' above can be obtained
+### with:
+###     from iranges import IRanges
+###     from random import randint
+###     query = IRanges([randint(1, 300000000) for i in range(90000)], \
+###                     width=[randint(1, 20000) for i in range(90000)])
+###     subject = IRanges([randint(1, 300000000) for i in range(40000000)], \
+###                     width=[100 for i in range(40000000)])
+### To find the overlaps (and time the operation):
+###     import time
+###     t0 = time.time(); res = subject.find_overlaps(query); time.time() - t0
 
 ### NOT exported.
 findOverlaps_NCList <- function(query, subject,
