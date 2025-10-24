@@ -147,7 +147,7 @@
     .Call2("C_solve_start_end_width", start, end, width, PACKAGE="IRanges")
 }
 
-.new_IRanges <- function(start=NULL, end=NULL, width=NULL)
+new_IRanges <- function(start=NULL, end=NULL, width=NULL)
 {
     start_is_null <- is.null(start)
     end_is_null <- is.null(end)
@@ -179,7 +179,7 @@ IRanges <- function(start=NULL, end=NULL, width=NULL, names=NULL, ...)
     if (!is.null(start) && is.null(end) && is.null(width)) {
         ans <- as(start, "IRanges")
     } else {
-        ans <- .new_IRanges(start=start, end=end, width=width)
+        ans <- new_IRanges(start=start, end=end, width=width)
     }
 
     if (!is.null(names))

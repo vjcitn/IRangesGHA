@@ -246,6 +246,7 @@ exportMethods(
 export(
     multisplit,
     IRanges, solveUserSEW,
+    makeIRangesFromDataFrame,
     successiveIRanges,
     slidingIRanges,
     breakInChunks,
