@@ -136,6 +136,31 @@ setGeneric("Views", signature="subject",
 
 
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+### Views() methods for integer and numeric
+###
+### Note that these methods are effectively implemented in the XVector
+### package!
+
+setMethod("Views", "integer",
+    function(subject, start=NULL, end=NULL, width=NULL, names=NULL)
+    {
+        S4Vectors:::load_package_gracefully("XVector", "by the Views() ",
+                                            "method for integer vectors")
+        callGeneric()
+    }
+)
+
+setMethod("Views", "numeric",
+    function(subject, start=NULL, end=NULL, width=NULL, names=NULL)
+    {
+        S4Vectors:::load_package_gracefully("XVector", "by the Views() ",
+                                            "method for numeric vectors")
+        callGeneric()
+    }
+)
+
+
+### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ### unlist()
 ###
 

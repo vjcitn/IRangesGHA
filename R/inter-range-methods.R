@@ -90,9 +90,9 @@ setMethod("range", "IntegerRangesList",
     x_start <- start(x)
     x_end <- end(x)
     ## TEMPORARY HACK!
-    if (!requireNamespace("XVector", quietly=TRUE))
-        stop("the XVector package is required by the \"range\" method ",
-             "for CompressedIRangesList objects")
+    S4Vectors:::load_package_gracefully("XVector", "by the range() method ",
+                                        "for CompressedIRangesList objects")
+
     ## 'sv' and 'ev' are XIntegerViews objects (see XVector package).
     sv <- Views(x_start@unlistData, x_start@partitioning)
     ev <- Views(x_end@unlistData, x_end@partitioning)

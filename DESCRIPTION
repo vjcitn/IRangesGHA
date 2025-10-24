@@ -10,7 +10,7 @@ Description: Provides efficient low-level and highly reusable S4
 biocViews: Infrastructure, DataRepresentation
 URL: https://bioconductor.org/packages/IRanges
 BugReports: https://github.com/Bioconductor/IRanges/issues
-Version: 2.43.6
+Version: 2.43.7
 License: Artistic-2.0
 Encoding: UTF-8
 Authors@R: c(
@@ -19,7 +19,7 @@ Authors@R: c(
 	person("Patrick", "Aboyoun", role="aut"),
 	person("Michael", "Lawrence", role="aut"))
 Depends: R (>= 4.0.0), methods, utils, stats,
-	BiocGenerics (>= 0.53.2), S4Vectors (>= 0.47.5)
+	BiocGenerics (>= 0.53.2), S4Vectors (>= 0.47.6)
 Imports: stats4
 LinkingTo: S4Vectors
 Suggests: XVector, GenomicRanges, Rsamtools, GenomicAlignments, GenomicFeatures,

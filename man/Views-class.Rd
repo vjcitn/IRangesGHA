@@ -18,7 +18,11 @@
 \alias{end<-,Views-method}
 \alias{width<-,Views-method}
 \alias{names<-,Views-method}
+
 \alias{Views}
+\alias{Views,integer-method}
+\alias{Views,numeric-method}
+
 \alias{unlist,Views-method}
 \alias{coerce,Vector,Views-method}
 \alias{coerce,Views,IntegerRanges-method}
@@ -77,8 +81,9 @@
   In the code snippets below, \code{from} is a Views object:
 
   \describe{
-    \item{\code{as(from, "IRanges")}:}{ Creates an \code{IRanges} object
-      containing the view locations in \code{from}.
+    \item{\code{as(from, "IRanges")}:}{
+      Creates an \code{IRanges} object containing the view
+      locations in \code{from}.
     }
   }
 }
@@ -97,7 +102,8 @@
 
 \section{Subsetting}{
   \describe{
-    \item{\code{x[i]}:}{ Select the views specified by \code{i}.
+    \item{\code{x[i]}:}{
+      Select the views specified by \code{i}.
     }
     \item{\code{x[[i]]}:}{
       Extracts the view selected by \code{i} as an object of the same class
@@ -113,8 +119,8 @@
 
 \section{Concatenation}{
   \describe{
-    \item{\code{c(x, ..., ignore.mcols=FALSE)}:}{ Concatenate \code{Views} objects.
-      They must have the same subject.
+    \item{\code{c(x, ..., ignore.mcols=FALSE)}:}{
+      Concatenate \code{Views} objects. They must have the same subject.
     }
   }
 }
@@ -133,7 +139,8 @@
        \code{trim(narrow(x, start=start, end=end, width=width, use.names=use.names))}.
     }
     \item{\code{successiveViews(subject, width, gapwidth=0, from=1)}:}{
-       Equivalent to \code{Views(subject, successiveIRanges(width, gapwidth, from))}.
+       Equivalent to
+       \preformatted{  Views(subject, successiveIRanges(width, gapwidth, from))}
        See \code{?successiveIRanges} for a description of the \code{width},
        \code{gapwidth} and \code{from} arguments.
     }
@@ -160,17 +167,28 @@
 \examples{
 showClass("Views")  # shows (some of) the known subclasses
 
-## Create a set of 4 views on an XInteger subject of length 10:
-subject <- Rle(3:-6)
-v1 <- Views(subject, start=4:1, end=4:7)
+## Create a set of 4 views on an Rle subject of length 50:
+subject <- Rle(LETTERS[1:10], 5)
+v1 <- Views(subject, start=9:4, end=9:14)
+v1
 
-## Extract the 2nd view:
-v1[[2]]
+## Extract the 4th view:
+v1[[4]]
 
-## Some views can be "out of limits"
-v2 <- Views(subject, start=4:-1, end=6)
+## Some views can be "out of limits":
+v2 <- Views(101:110, start=4:-1, end=6)
+\dontrun{
+  v2[[5]]  # Error! view is out of limits
+}
+
+## Trimming the views so they're no longer out of limits:
 trim(v2)
-subviews(v2, end=-2)
+
+trim(v2)[[5]]
+
+## Note that using subviews() with no additional arguments has
+## the same effect as trimming:
+subviews(v2)
 
 ## See ?`XIntegerViews-class` in the XVector package for more examples.
 }
