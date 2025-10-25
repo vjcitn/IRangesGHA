@@ -8,7 +8,6 @@ test_AtomicList_GroupGenerics <- function() {
             checkIdentical(as.list(log(list1)), lapply(list1, log))
             checkIdentical(as.list(round(sqrt(list1))),
                            lapply(list1, function(x) round(sqrt(x))))
-            checkIdentical(sum(list1), sapply(list1, sum))
         }
     }
 }
@@ -41,26 +40,12 @@ test_AtomicList_numerical <- function() {
                            mapply(pmax.int, list1, list2))
             checkIdentical(as.list(pmin.int(list1, list2)),
                            mapply(pmin.int, list1, list2))
-            checkIdentical(mean(list1, na.rm=TRUE),
-                           sapply(list1, mean, na.rm=TRUE))
-            checkIdentical(var(list1, na.rm=TRUE),
-                           sapply(list1, var, na.rm=TRUE))
             checkIdentical(cov(list1, list2, use="complete.obs"),
                            mapply(cov, list1, list2,
                                   MoreArgs = list(use="complete.obs")))
             checkIdentical(cor(list1, list2, use="complete.obs"),
                            mapply(cor, list1, list2,
                                   MoreArgs = list(use="complete.obs")))
-            checkIdentical(sd(list1, na.rm=TRUE),
-                           sapply(list1, sd, na.rm=TRUE))
-            checkIdentical(median(list1, na.rm=TRUE),
-                           sapply(list1, median, na.rm=TRUE))
-            checkIdentical(quantile(list1, na.rm=TRUE),
-                           do.call(rbind, lapply(list1, quantile, na.rm=TRUE)))
-            checkIdentical(mad(list1, na.rm=TRUE),
-                           sapply(list1, mad, na.rm=TRUE))
-            checkIdentical(IQR(list1, na.rm=TRUE),
-                           sapply(list1, IQR, na.rm=TRUE))
 
             vec3 <- (-20:20)^2
             vec3[c(1,10,21,41)] <- c(100L, 30L, 400L, 470L)

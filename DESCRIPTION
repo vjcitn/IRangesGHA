@@ -45,7 +45,7 @@ Collate: thread-control.R
 	Grouping-class.R
 	Views-class.R
 	RleViews-class.R
-	RleViews-utils.R
+	RleViews-summarization.R
 	extractList.R
 	seqapply.R
 	multisplit.R
@@ -63,6 +63,7 @@ Collate: thread-control.R
 	CompressedHitsList-class.R
 	CompressedDataFrameList-class.R
 	CompressedAtomicList-class.R
+	CompressedAtomicList-summarization.R
 	CompressedGrouping-class.R
 	CompressedRangesList-class.R
 	Hits-class-leftovers.R

@@ -299,7 +299,11 @@
 
 \seealso{
   \itemize{
-    \item \link{AtomicList-utils} for common operations on AtomicList objects.
+    \item \link{AtomicList_utils} for common operations on AtomicList objects.
+
+    \item \link{AtomicList_summarization} for operations from the
+          \code{Summary} group generic and other summarization
+          operations on AtomicList objects.
 
     \item \link[S4Vectors]{List} objects in the \pkg{S4Vectors} package for
           the parent class.

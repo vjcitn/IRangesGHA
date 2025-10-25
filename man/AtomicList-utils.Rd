@@ -1,6 +1,7 @@
 \name{AtomicList-utils}
 
 \alias{AtomicList-utils}
+\alias{AtomicList_utils}
 
 \alias{Ops,AtomicList,AtomicList-method}
 \alias{Ops,CompressedAtomicList,CompressedAtomicList-method}
@@ -16,13 +17,8 @@
 \alias{Math,CompressedAtomicList-method}
 \alias{Math2,AtomicList-method}
 \alias{Math2,CompressedAtomicList-method}
-\alias{Summary,AtomicList-method}
-\alias{Summary,CompressedRleList-method}
 \alias{Complex,AtomicList-method}
 \alias{Complex,CompressedAtomicList-method}
-\alias{sum,CompressedIntegerList-method}
-\alias{sum,CompressedLogicalList-method}
-\alias{sum,CompressedNumericList-method}
 
 \alias{which,CompressedLogicalList-method}
 \alias{which,SimpleLogicalList-method}
@@ -36,10 +32,6 @@
 \alias{which.min,RleList-method}
 \alias{which.min,IntegerList-method}
 \alias{which.min,NumericList-method}
-\alias{all,CompressedRleList-method}
-\alias{all,CompressedAtomicList-method}
-\alias{any,CompressedAtomicList-method}
-\alias{anyNA,CompressedAtomicList-method}
 
 \alias{diff.AtomicList}
 \alias{diff,CompressedAtomicList-method}
@@ -57,28 +49,10 @@
 \alias{pmin.int,NumericList-method}
 \alias{pmin.int,RleList-method}
 
-\alias{mean,AtomicList-method}
-\alias{mean,CompressedLogicalList-method}
-\alias{mean,CompressedIntegerList-method}
-\alias{mean,CompressedNumericList-method}
-\alias{mean,CompressedRleList-method}
-\alias{var,AtomicList,missing-method}
-\alias{var,AtomicList,AtomicList-method}
-\alias{cov,AtomicList,AtomicList-method}
-\alias{cor,AtomicList,AtomicList-method}
-\alias{sd,AtomicList-method}
-\alias{median,AtomicList-method}
-\alias{median,CompressedAtomicList-method}
-\alias{quantile,AtomicList-method}
-\alias{mad,AtomicList-method}
-\alias{IQR,AtomicList-method}
 \alias{cumsum,CompressedAtomicList-method}
 \alias{cumprod,CompressedAtomicList-method}
 \alias{cummin,CompressedAtomicList-method}
 \alias{cummax,CompressedAtomicList-method}
-\alias{range,CompressedIntegerList-method}
-\alias{range,CompressedNumericList-method}
-\alias{range,CompressedLogicalList-method}
 
 \alias{smoothEnds,CompressedIntegerList-method}
 \alias{smoothEnds,SimpleIntegerList-method}
@@ -152,8 +126,8 @@
 }
 
 \section{Group Generics}{
-  AtomicList objects have support for S4 group generic functionality to operate
-  within elements across objects:
+  \link{AtomicList} objects have support for S4 group generic functionality
+  to operate within elements across objects:
   \describe{
     \item{\code{Arith}}{\code{"+"}, \code{"-"}, \code{"*"}, \code{"^"},
       \code{"\%\%"}, \code{"\%/\%"}, \code{"/"}}
@@ -170,36 +144,31 @@
       \code{"cosh"}, \code{"sin"}, \code{"sinh"}, \code{"tan"}, \code{"tanh"},
       \code{"gamma"}, \code{"lgamma"}, \code{"digamma"}, \code{"trigamma"}}
     \item{\code{Math2}}{\code{"round"}, \code{"signif"}}
-    \item{\code{Summary}}{\code{"max"}, \code{"min"}, \code{"range"},
-      \code{"prod"}, \code{"sum"}, \code{"any"}, \code{"all"}}
     \item{\code{Complex}}{\code{"Arg"}, \code{"Conj"}, \code{"Im"},
       \code{"Mod"}, \code{"Re"}}
   }
+
   See \link[methods]{S4groupGeneric} for more details.
+
+  See \link{AtomicList_summarization} for operations from the \code{Summary}
+  group generic and other summarization operations on \link{AtomicList} objects.
 }
 
 \section{Other Methods}{
-  The AtomicList objects also support a large number of basic methods.
+  \link{AtomicList} objects also support a large number of basic methods.
   Like the group generics above, these methods perform the corresponding
   operation on each element of the list separately. The methods are: 
 
   \describe{
-    \item{Logical}{\code{!}, \code{which}, \code{which.max}, \code{which.min}}
+    \item{Logical}{\code{!}, \code{which}}
     \item{Numeric}{\code{diff},
-                   \code{pmax}, \code{pmax.int}, \code{pmin}, \code{pmin.int},
-                   \code{mean}, \code{var}, \code{cov}, \code{cor}, \code{sd},
-                   \code{median}, \code{quantile}, \code{mad}, \code{IQR}}
+                   \code{pmax}, \code{pmax.int}, \code{pmin}, \code{pmin.int}}
     \item{Running Window}{\code{smoothEnds}, \code{runmed}. \code{runmean},
                           \code{runsum}, \code{runwtsum}, \code{runq}}
     \item{Character}{\code{nchar}, \code{chartr}, \code{tolower},
                      \code{toupper}, \code{sub}, \code{gsub},
                      \code{startsWith}, \code{endsWith}}
   }
-
-  The \code{which.min} and \code{which.max} functions have an extra
-  argument, \code{global=FALSE}, which controls whether the returned
-  subscripts are global (compatible with the unlisted form of the input)
-  or local (compatible with the corresponding list element).
 
   The \code{rank} method only supports tie methods \dQuote{average},
   \dQuote{first}, \dQuote{min} and \dQuote{max}.
@@ -221,6 +190,10 @@
 
 \seealso{
   \itemize{
+    \item \link{AtomicList_summarization} for operations from the
+          \code{Summary} group generic and other summarization
+          operations on \link{AtomicList} objects.
+
     \item \link{AtomicList} objects.
   }
 }
@@ -233,7 +206,5 @@ col1 <- IntegerList(one = int1, int2)
 2 * col1
 col1 + col1
 col1 > 2
-sum(col1)  # equivalent to (but faster than) 'sapply(col1, sum)'
-mean(col1)  # equivalent to 'sapply(col1, mean)'
 }
 \keyword{methods}

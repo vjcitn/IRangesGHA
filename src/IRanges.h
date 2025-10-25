@@ -173,7 +173,7 @@ SEXP C_vmembers_H2LGrouping(
 );
 
 
-/* RleViews_utils.c */
+/* RleViews_summarization.c */
 
 SEXP C_summarize_RleViews(
 	SEXP op,

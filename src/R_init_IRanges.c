@@ -31,7 +31,7 @@ static const R_CallMethodDef callMethods[] = {
 	CALLMETHOD_DEF(C_members_H2LGrouping, 2),
 	CALLMETHOD_DEF(C_vmembers_H2LGrouping, 2),
 
-/* RleViews_utils.c */
+/* RleViews_summarization.c */
 	CALLMETHOD_DEF(C_summarize_RleViews, 4),
 
 /* SimpleIRangesList_class.c */
