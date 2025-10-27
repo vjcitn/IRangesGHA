@@ -351,9 +351,8 @@ setMethod("viewApply", "Views",
                       ...),
               simplify = simplify)
         if (!simplify) {
-            ans <- S4Vectors:::new_SimpleList_from_list("SimpleList", ans,
-                                                        metadata = metadata(X),
-                                                        mcols = mcols(X, use.names=FALSE))
+            ans <- as(ans, "CompressedList")
+            mcols(ans) <- mcols(X, use.names=FALSE)
         }
         ans
     }
@@ -371,10 +370,10 @@ setGeneric("viewWhichMins", signature="x",
            function(x, na.rm = FALSE) standardGeneric("viewWhichMins"))
 setGeneric("viewWhichMaxs", signature="x",
            function(x, na.rm = FALSE) standardGeneric("viewWhichMaxs"))
-setGeneric("viewRangeMaxs",
-           function(x, na.rm = FALSE) standardGeneric("viewRangeMaxs"))
 setGeneric("viewRangeMins",
            function(x, na.rm = FALSE) standardGeneric("viewRangeMins"))
+setGeneric("viewRangeMaxs",
+           function(x, na.rm = FALSE) standardGeneric("viewRangeMaxs"))
 
 setMethod("Summary", "Views", function(x, ..., na.rm = FALSE) {
   viewSummaryFunMap <- list(min = viewMins, max = viewMaxs, sum = viewSums)
