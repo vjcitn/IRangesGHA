@@ -1,3 +1,28 @@
+CHANGES IN VERSION 2.44.0
+-------------------------
+
+NEW FEATURES
+
+    o Add makeIRangesFromDataFrame(). Also add:
+      - coercion from data.frame or DataFrame to IRanges,
+      - support for IRanges(<data.frame>) and IRanges(<DataFrame>).
+
+    o Define Views() methods for integer and numeric vectors (they require
+      the XVector package).
+
+    o Start experimenting with multithreading in findOverlaps().
+
+SIGNIFICANT USER-VISIBLE CHANGES
+
+    o Significantly reduce findOverlaps() memory footprint. See commit 247ed4e.
+
+    o Some clarification in nearest()'s documentation.
+
+BUG FIXES
+
+    o Small tweak to viewApply() method for Views objects.
+
+
 CHANGES IN VERSION 2.42.0
 -------------------------
 
