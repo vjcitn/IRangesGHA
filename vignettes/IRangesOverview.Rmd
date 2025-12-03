@@ -1,0 +1,18 @@
+---
+title: "An Overview of the IRanges package"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+vignette: >
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteIndexEntry{IRanges overview}
+  %\VignetteEncoding{UTF-8}
+output:
+  BiocStyle::html_document:
+    highlight: pygments
+    number_sections: yes
+    theme: united
+    toc: yes
+---
+
+# Introduction
+
+Vignette removed for this GHA-oriented package image as it caused problems for rchk workflow.
